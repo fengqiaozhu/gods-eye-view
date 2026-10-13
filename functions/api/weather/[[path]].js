@@ -70,7 +70,7 @@ async function getMetadata(ctx,product) {
   if(cache){const hit=await cache.match(key);if(hit) return hit.json();}
   const spec=PRODUCTS[product];
   const url=`${BASE}${spec.service}/ows?service=WMS&version=1.3.0&request=GetCapabilities`;
-  const res=await fetch(url,{redirect:'error',headers:{Accept:'application/xml,text/xml'},
+  const res=await fetch(url,{redirect: 'manual',headers:{Accept:'application/xml,text/xml'},
     signal:AbortSignal.timeout(12000)});
   if(!res.ok)throw Error('NOAA metadata unavailable');
   const bytes=await readLimited(res,512*1024);
@@ -144,7 +144,7 @@ export async function onRequest(ctx) {
     bbox:bounds.join(','),width:String(width),height:String(height),
     format:'image/png',transparent:'true',time}).toString();
   try{
-    const res=await fetch(upstream.href,{redirect:'error',headers:{Accept:'image/png'},
+    const res=await fetch(upstream.href,{redirect: 'manual',headers:{Accept:'image/png'},
       signal:AbortSignal.timeout(18000)});
     if(!res.ok||!/^image\/png(?:;|$)/i.test(res.headers.get('content-type')||'')){
       await res.body?.cancel().catch(()=>{});throw Error('NOAA tile unavailable');
