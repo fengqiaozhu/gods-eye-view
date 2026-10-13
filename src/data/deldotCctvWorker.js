@@ -114,7 +114,14 @@ export async function fetchDelDotHls(request,source,file='playlist.m3u8'){
  const m=/^deldot-(kcam\d{3,5})$/i.exec(source.id);
  if(!m)return sendJson({error:'invalid_camera_id'},400);
  const id=m[1].toUpperCase();
- const upstreamUrl=`${VIDEO_HOST}/live/${id}.stream/${file}`;
+ const upstream = new URL(`${VIDEO_HOST}/live/${id}.stream/${file}`);
+ // HLS media-playlist URLs can carry server-issued Wowza session identifiers.
+ // Re-forward ONLY the exact safe query keys from the previously rewritten URI.
+ for (const [name,value] of new URL(request.url).searchParams) {
+   if (/^(?:wowzasessionid|wowzatoken|token|sessionid|_HLS_msn|_HLS_part)$/.test(name) &&
+     value.length <= 128) upstream.searchParams.append(name,value);
+ }
+ const upstreamUrl=upstream.href;
  try{
   const playlist=file.endsWith('.m3u8');
   const response=await fetch(upstreamUrl,{redirect: 'manual',signal:AbortSignal.timeout(14000),
@@ -137,7 +144,7 @@ export async function fetchDelDotHls(request,source,file='playlist.m3u8'){
 }
 export async function cctvOriginDiagnostics({request,waitUntil}){
  const store=typeof caches==='undefined'?null:caches.default;
- const key=new Request(new URL(request.url).origin+'/_gev_internal/cctv_diag_20261013_v3');
+ const key=new Request(new URL(request.url).origin+'/_gev_internal/cctv_diag_20261013_v4');
  if(store){const cached=await store.match(key);if(cached)return cached}
  const targets=[
   ['deldotCatalog',API],
@@ -177,7 +184,7 @@ export async function cctvOriginDiagnostics({request,waitUntil}){
     const url=new URL(next,local),file=url.pathname.split('/').at(-1);
     const variant=await fetchDelDotHls(new Request(url),live,file);
     const text=await variant.text();
-    proxyChecks.push({kind:'variant',status:variant.status,
+    proxyChecks.push({kind:'variant',path:url.pathname,queryKeys:[...url.searchParams.keys()],status:variant.status,
      mime:(variant.headers.get('content-type')||'').split(';')[0],
      entries:text.startsWith('#EXTM3U')?text.split('\n').filter(x=>x&&!x.startsWith('#')).length:0,
      error:variant.ok?null:text.slice(0,200)});
