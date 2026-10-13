@@ -17,7 +17,7 @@ const send = (data, ttl = 0) => new Response(JSON.stringify(data), {
     'x-gev-edge': 'cyclone-worker-1' }
 });
 async function fetchJson(url, cap) {
-  const res = await fetch(url, { redirect: 'error', headers: { Accept: 'application/geo+json,application/json' }, signal: AbortSignal.timeout(12000) });
+  const res = await fetch(url, { redirect: 'manual', headers: { Accept: 'application/geo+json,application/json' }, signal: AbortSignal.timeout(12000) });
   if (!res.ok) throw Error('NOAA unavailable');
   if (Number(res.headers.get('content-length') || 0) > cap) throw Error('NOAA too large');
   const text = await res.text();
