@@ -137,7 +137,7 @@ export async function fetchDelDotHls(request,source,file='playlist.m3u8'){
 }
 export async function cctvOriginDiagnostics({request,waitUntil}){
  const store=typeof caches==='undefined'?null:caches.default;
- const key=new Request(new URL(request.url).origin+'/_gev_internal/cctv_diag_20261013');
+ const key=new Request(new URL(request.url).origin+'/_gev_internal/cctv_diag_20261013_v2');
  if(store){const cached=await store.match(key);if(cached)return cached}
  const targets=[
   ['deldotCatalog',API],
@@ -153,6 +153,7 @@ export async function cctvOriginDiagnostics({request,waitUntil}){
    return {source,status:res.status,mime:(res.headers.get('content-type')||'').split(';')[0],
     durationMs:Date.now()-started};
   }catch(e){return {source,status:null,error:e?.name==='TimeoutError'?'timeout':'connection_failed',
+    errorName:String(e?.name||'unknown').slice(0,30),detail:String(e?.message||'unknown').slice(0,160),
     durationMs:Date.now()-started}}
  }));
  const r=new Response(JSON.stringify({checkedAt:new Date().toISOString(),sources:entries}),{
