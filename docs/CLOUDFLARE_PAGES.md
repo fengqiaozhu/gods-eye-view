@@ -35,7 +35,7 @@ Changes pushed to `main` need to be deployed through Cloudflare Pages Git integr
 | `/api/cyclones` | ✅ | NOAA NHC/CPHC; 5-minute cache; optional geometry |
 | `/api/tomtom/status`, `/api/firms/status` | Partial | Only feature status placeholders. No live traffic/fire-heatmap feed |
 | `/api/mapillary/status` | Partial | Only reports whether a token is configured; imagery tile proxy not migrated |
-| `/api/cctv/sources`, `/health`, `/stream/:id`, `/frame/:id`, `/media/:id` | Partial | Keyless official Austin/Caltrans/TfL online camera catalogs plus 96 vetted bundled Tallinn still cameras (fallback when external catalog APIs are inaccessible); bounded official image frames; HLS/video and other regional catalogs not yet supported |
+| `/api/cctv/sources`, `/health`, `/stream/:id`, `/frame/:id`, `/media/:id`, `/media/:id/:segment` | Partial | Official Austin/Caltrans/TfL still catalogs, 96 bundled Tallinn still cameras, and DelDOT HTTPS live HLS playlists/segments through a fixed-origin proxy; not every upstream camera is currently online |
 | `/api/vessels` | ❌ | Long-lived AISStream WebSocket state needs a Durable Object/other persistent consumer, and an AISStream key |
 | `/api/overpass` and military installations | ❌ | Multi-query Overpass workload and request governor not ported |
 | `/api/weather/manifest`, `/api/weather/image`, `/api/weather/tile` | ✅* | NOAA nowCOAST WMS metadata / PNG images / tiles; depends on public NOAA WMS availability and quotas |
@@ -50,7 +50,13 @@ Unmigrated API paths respond with HTTP `501` and a JSON error instead of silentl
 
 ## CCTV caveat
 
-The bundled Tallinn catalog guarantees a nonempty map even when the public Austin/Caltrans/TfL JSON feeds fail, but the **individual JPEG stills are best effort**: official city frame hosts can refuse Cloudflare requests or return unavailable. A returned camera location is not proof a live frame is currently available.
+The bundled Tallinn catalog guarantees a nonempty map even if a public directory is unavailable, but the **individual JPEG stills are best effort**: official city frame hosts can refuse Cloudflare requests or return unavailable. A returned camera location is not proof a live frame is currently available.
+
+Live DelDOT HLS cameras are loaded from the publicly available `tmc.deldot.gov/json/videocamera.json` catalog. Their media stream is relayed exclusively from `video.deldot.gov/live/KCAM*.stream/` with URL validation and caps on playlist/segment sizes. When the official directory cannot load, a small previously observed camera list is used only as a *last-known listing*, not a guarantee of live availability. Neither footage nor recordings are stored.
+
+**Important Cloudflare compatibility fix:** Workers `fetch` rejects `redirect: 'error'` before issuing the request. Every deployed proxy now uses `redirect: 'manual'` and handles non-2xx/3xx explicitly to reject upstream redirects. This fix restored official camera catalog, HLS, and JPEG origin connectivity in live tests.
+
+The public DelDOT feeds are available without a key, but public availability is not a blanket commercial redistribution license. Confirm the provider's terms before making large-scale third-party distribution.
 
 ## Keys and security
 
@@ -75,11 +81,13 @@ curl -fsS "$BASE/api/fire-perimeters" | head -c 500
 curl -fsS "$BASE/api/cyclones" | head -c 500
 curl -fsS "$BASE/api/weather/manifest?product=radar" | head -c 500
 curl -fsS "$BASE/api/cctv/sources" | head -c 500
+curl -fsS "$BASE/api/cctv/diagnostics"  # bounded upstream + HLS proxy smoke test
+curl -f "$BASE/api/cctv/media/deldot-kcam001" | head -c 800
 ```
 
 ## Next migration order
 
-1. Extend CCTV beyond the bundled Tallinn + optional online still-camera catalogs: HLS/video and more regional providers, keeping strict upstream URL allowlists.
+1. Extend CCTV beyond DelDOT HLS and current public still providers: other regional HLS/transports, real-time camera health reporting and throttling.
 2. Overpass / military installations with budgeted queries and consistent cache.
 3. NOAA wind GFS/IFS GRIB decoding, persistent grid snapshots and remaining realtime image overlays.
 4. Optional AI voice and private-key proxies with spend limits.
