@@ -35,7 +35,7 @@ Changes pushed to `main` need to be deployed through Cloudflare Pages Git integr
 | `/api/cyclones` | ✅ | NOAA NHC/CPHC; 5-minute cache; optional geometry |
 | `/api/tomtom/status`, `/api/firms/status` | Partial | Only feature status placeholders. No live traffic/fire-heatmap feed |
 | `/api/mapillary/status` | Partial | Only reports whether a token is configured; imagery tile proxy not migrated |
-| `/api/cctv/sources`, `/health`, `/stream/:id`, `/frame/:id`, `/media/:id` | Partial | Keyless official Austin/Caltrans/TfL camera catalogs and bounded public still frames; HLS/video and other regional catalogs not yet supported |
+| `/api/cctv/sources`, `/health`, `/stream/:id`, `/frame/:id`, `/media/:id` | Partial | Keyless official Austin/Caltrans/TfL online camera catalogs plus 96 vetted bundled Tallinn still cameras (fallback when external catalog APIs are inaccessible); bounded official image frames; HLS/video and other regional catalogs not yet supported |
 | `/api/vessels` | ❌ | Long-lived AISStream WebSocket state needs a Durable Object/other persistent consumer, and an AISStream key |
 | `/api/overpass` and military installations | ❌ | Multi-query Overpass workload and request governor not ported |
 | `/api/weather/*`, `/api/wind/*` | ❌ | NOAA WMS image/tiles and GRIB decoding not ported |
@@ -72,7 +72,7 @@ curl -fsS "$BASE/api/cyclones" | head -c 500
 
 ## Next migration order
 
-1. Extend CCTV beyond keyless public stills: HLS/video and more provider catalogs, keeping strict upstream URL allowlists.
+1. Extend CCTV beyond the bundled Tallinn + optional online still-camera catalogs: HLS/video and more regional providers, keeping strict upstream URL allowlists.
 2. Overpass / military installations with budgeted queries and consistent cache.
 3. NOAA weather WMS layers / wind GRIB transforms.
 4. Optional AI voice and private-key proxies with spend limits.
