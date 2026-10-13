@@ -48,7 +48,7 @@ export const fallbackDelDotCameras = () =>
  FALLBACK_CAMERAS.map(([id,title,lat,lon])=>
   makeDelDotCamera({id,title,lat,lon,status:'Active'},true)).filter(Boolean);
 export async function loadDelDotCameras(){
- const response=await fetch(API,{redirect:'error',headers:{Accept:'application/json'},
+ const response=await fetch(API,{redirect: 'manual',headers:{Accept:'application/json'},
   signal:AbortSignal.timeout(13000)});
  if(!response.ok){await response.body?.cancel().catch(()=>{});throw Error('DelDOT catalog HTTP '+response.status)}
  const data=await limited(response,3*1024*1024);
@@ -117,7 +117,7 @@ export async function fetchDelDotHls(request,source,file='playlist.m3u8'){
  const upstreamUrl=`${VIDEO_HOST}/live/${id}.stream/${file}`;
  try{
   const playlist=file.endsWith('.m3u8');
-  const response=await fetch(upstreamUrl,{redirect:'error',signal:AbortSignal.timeout(14000),
+  const response=await fetch(upstreamUrl,{redirect: 'manual',signal:AbortSignal.timeout(14000),
    headers:{Accept:playlist?'application/vnd.apple.mpegurl,*/*':'*/*'}});
   if(!response.ok){
    await response.body?.cancel().catch(()=>{});
@@ -147,7 +147,7 @@ export async function cctvOriginDiagnostics({request,waitUntil}){
  const entries=await Promise.all(targets.map(async([source,url])=>{
   const started=Date.now();
   try{
-   const res=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(9000),
+   const res=await fetch(url,{redirect: 'manual',signal:AbortSignal.timeout(9000),
     headers:{Range:'bytes=0-1023'}});
    await res.body?.cancel().catch(()=>{});
    return {source,status:res.status,mime:(res.headers.get('content-type')||'').split(';')[0],
