@@ -1,9 +1,9 @@
 /**
- * Cloudflare Pages CCTV subset: Austin, Caltrans and TfL public stills.
+ * Cloudflare Pages CCTV: bounded official stills and DelDOT live HLS video.
  *
  * Intentional constraints:
  * - No arbitrary target URL can be supplied by a caller.
- * - No video/HLS or local hardware integrations.
+ * - Live HLS is limited to registered DelDOT traffic cameras; no local hardware.
  * - Camera poses are coarse estimated priors; never claim live calibration.
  * - Upstream endpoints match the upstream Node implementation.
  */
@@ -18,6 +18,8 @@ import {
 } from '../../../server/providers/cctv/normalize.js';
 import { directionToHeading } from '../../../src/data/directionText.js';
 import { tallinnPublicCameras } from '../../../src/data/tallinnPublicCameras.js';
+import { loadDelDotCameras, fallbackDelDotCameras, fetchDelDotHls,
+  cctvOriginDiagnostics } from '../../../src/data/deldotCctvWorker.js';
 
 const cacheApi = () => typeof caches !== 'undefined' ? caches.default : null;
 const output = (body, status = 200, ttl = 0) => new Response(JSON.stringify(body), {
@@ -133,7 +135,7 @@ async function tfl() {
 }
 function catalogKey(request) {
   const url = new URL(request.url);
-  return new Request(url.origin + '/_gev_internal/cctv_catalog_20261013');
+  return new Request(url.origin + '/_gev_internal/cctv_catalog_with_hls_20261013');
 }
 async function getCatalog(ctx) {
   const cache = cacheApi(), key = catalogKey(ctx.request);
@@ -141,12 +143,15 @@ async function getCatalog(ctx) {
     const hit = await cache.match(key);
     if (hit) return hit.json();
   }
-  const results = await Promise.allSettled([austin(),caltrans(),tfl()]);
+  const results = await Promise.allSettled([loadDelDotCameras(),austin(),caltrans(),tfl()]);
   // The upstream project's vetted Tallinn catalog is present even when every
   // external public camera API is unreachable from a Cloudflare POP.
-  const sources = tallinnPublicCameras.map(x => ({...x}));
+  const deldotResult = results[0];
+  const deldot = deldotResult.status==='fulfilled' && deldotResult.value.length
+    ? deldotResult.value : fallbackDelDotCameras();
+  const sources = [...deldot, ...tallinnPublicCameras.map(x=>({...x}))];
   const seen = new Set(sources.map(x => x.id));
-  for (const result of results) {
+  for (const result of results.slice(1)) {
     if (result.status !== 'fulfilled') continue;
     for (const camera of result.value) {
       if (seen.has(camera.id)) continue;
@@ -207,6 +212,15 @@ async function frame(ctx, source) {
 }
 export async function onRequest(ctx) {
   const request = ctx.request, path = new URL(request.url).pathname;
+  if (path === '/api/cctv/diagnostics') {
+    if (request.method !== 'GET') return output({error:'method_not_allowed'},405);
+    return cctvOriginDiagnostics(ctx);
+  }
+  // Existing client sends a DELETE on HLS teardown; the stateless Worker has no
+  // long-lived lease to release, but must answer it instead of an HTML fallback.
+  if (request.method === 'DELETE' &&
+    /^\/api\/cctv\/media\/deldot-kcam\d{3,5}$/i.test(path))
+    return new Response(null,{status:204});
   if (request.method !== 'GET') return output({error:'method_not_allowed'},405);
   if (path === '/api/cctv/health') return output({cameras:[]});
   const catalog = await getCatalog(ctx);
@@ -214,12 +228,20 @@ export async function onRequest(ctx) {
     sources: catalog.sources.map(publicCamera),
     trimmedPacks: catalog.trimmedPacks
   },200,900);
-  const m = /^\/api\/cctv\/(stream|frame|media)\/([A-Za-z0-9_.-]{1,80})$/.exec(path);
+  const m = /^\/api\/cctv\/(stream|frame|media)\/([A-Za-z0-9_.-]{1,80})(?:\/([A-Za-z0-9_.-]{1,180}))?$/.exec(path);
   if (!m) return output({error:'unknown_cctv_route'},404);
-  const source = catalog.sources.find(x=>x.id === m[2]);
+  const source = catalog.sources.find(x=>x.id===m[2]);
   if (!source) return output({error:'camera_not_found'},404);
-  if (m[1] === 'stream') return output({ id:source.id,feedType:'image',
-    mediaUrl:null,frameUrl:`/api/cctv/frame/${encodeURIComponent(source.id)}`,
-    provider:source.provider,sourceKind:source.sourceKind });
+  if (m[1] === 'stream') return output({
+    id:source.id,feedType:source.feedType,
+    mediaUrl:source.feedType==='hls'?`/api/cctv/media/${encodeURIComponent(source.id)}`:null,
+    frameUrl:`/api/cctv/frame/${encodeURIComponent(source.id)}`,
+    provider:source.provider,sourceKind:source.sourceKind
+  });
+  if (m[1] === 'media') {
+    if (source.feedType==='hls') return fetchDelDotHls(request,source,m[3]||'playlist.m3u8');
+    return frame(ctx,source);
+  }
+  if (source.feedType==='hls') return output({error:'video_feed_has_no_still_frame'},404);
   return frame(ctx,source);
 }
