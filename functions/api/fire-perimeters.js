@@ -40,7 +40,7 @@ export async function onRequest({ request, waitUntil }) {
         ...(page ? { resultOffset: String(features.length) } : {})
       });
       const upstream = await fetch(url.href, {
-        redirect: 'error', headers: { accept: 'application/geo+json,application/json' },
+        redirect: 'manual', headers: { accept: 'application/geo+json,application/json' },
         signal: AbortSignal.timeout(18000)
       });
       if (!upstream.ok) {
