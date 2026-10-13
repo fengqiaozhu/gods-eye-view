@@ -38,7 +38,8 @@ Changes pushed to `main` need to be deployed through Cloudflare Pages Git integr
 | `/api/cctv/sources`, `/health`, `/stream/:id`, `/frame/:id`, `/media/:id` | Partial | Keyless official Austin/Caltrans/TfL online camera catalogs plus 96 vetted bundled Tallinn still cameras (fallback when external catalog APIs are inaccessible); bounded official image frames; HLS/video and other regional catalogs not yet supported |
 | `/api/vessels` | ❌ | Long-lived AISStream WebSocket state needs a Durable Object/other persistent consumer, and an AISStream key |
 | `/api/overpass` and military installations | ❌ | Multi-query Overpass workload and request governor not ported |
-| `/api/weather/*`, `/api/wind/*` | ❌ | NOAA WMS image/tiles and GRIB decoding not ported |
+| `/api/weather/manifest`, `/api/weather/image`, `/api/weather/tile` | ✅* | NOAA nowCOAST WMS metadata / PNG images / tiles; depends on public NOAA WMS availability and quotas |
+| `/api/wind/*` | ❌ | GFS/IFS GRIB decoding and grid state not ported |
 | `/api/transit/*`, `/api/gbfs/*`, `/api/radio/*` | ❌ | Feed-specific policies / cache and transport integrations needed |
 | `/api/realtime/token`, `/api/openai/*` | ❌ | Voice/hud credentials, per-user cost controls, and tool orchestration not ported |
 | `/api/realtime/oauth-*` | ❌ | Local Codex OAuth cannot run in a stateless Worker |
@@ -46,6 +47,10 @@ Changes pushed to `main` need to be deployed through Cloudflare Pages Git integr
 | `/api/places/*`, Google Places / Mapillary tiles | ❌ | Server-side secrets and fixed-origin proxy need separate implementation |
 
 Unmigrated API paths respond with HTTP `501` and a JSON error instead of silently returning the SPA's HTML.
+
+## CCTV caveat
+
+The bundled Tallinn catalog guarantees a nonempty map even when the public Austin/Caltrans/TfL JSON feeds fail, but the **individual JPEG stills are best effort**: official city frame hosts can refuse Cloudflare requests or return unavailable. A returned camera location is not proof a live frame is currently available.
 
 ## Keys and security
 
@@ -68,13 +73,15 @@ curl -fsS "$BASE/api/celestrak/stations" | head
 curl -fsS "$BASE/api/military" | head -c 500
 curl -fsS "$BASE/api/fire-perimeters" | head -c 500
 curl -fsS "$BASE/api/cyclones" | head -c 500
+curl -fsS "$BASE/api/weather/manifest?product=radar" | head -c 500
+curl -fsS "$BASE/api/cctv/sources" | head -c 500
 ```
 
 ## Next migration order
 
 1. Extend CCTV beyond the bundled Tallinn + optional online still-camera catalogs: HLS/video and more regional providers, keeping strict upstream URL allowlists.
 2. Overpass / military installations with budgeted queries and consistent cache.
-3. NOAA weather WMS layers / wind GRIB transforms.
+3. NOAA wind GFS/IFS GRIB decoding, persistent grid snapshots and remaining realtime image overlays.
 4. Optional AI voice and private-key proxies with spend limits.
 5. AISStream via Durable Object plus durable snapshot/connection model.
 
