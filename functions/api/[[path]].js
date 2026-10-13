@@ -29,7 +29,7 @@ const hintHeaders = (ttl, extra = {}) => ({ 'cache-control': ttl ? `public, max-
 const sharedCache = () => typeof caches !== 'undefined' ? caches.default : null;
 
 /** Cache safely by incoming URL (never secrets), only 200 responses; limit body size. */
-async function cached(ctx, target, { ttl = 60, maxBytes = 5 * 1024 * 1024, type, headers = {}, method = 'GET', body, redirect = 'error', transform, fallbackMessage = 'Upstream unavailable' } = {}) {
+async function cached(ctx, target, { ttl = 60, maxBytes = 5 * 1024 * 1024, type, headers = {}, method = 'GET', body, redirect = 'manual', transform, fallbackMessage = 'Upstream unavailable' } = {}) {
   const request = ctx.request;
   const cache = sharedCache();
   const cacheKey = new Request(request.url, { method: 'GET' });
