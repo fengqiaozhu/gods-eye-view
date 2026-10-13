@@ -37,7 +37,7 @@ export async function onRequest({ request, waitUntil }) {
       const batch = await Promise.all(chunks.slice(offset, offset + 4).map(async (chunk) => {
         const upstream = new URL('https://terrain.reearth.land/heights.json');
         upstream.searchParams.set('points', chunk.join(';'));
-        const response = await fetch(upstream, { redirect: 'error', signal: AbortSignal.timeout(25000) });
+        const response = await fetch(upstream, { redirect: 'manual', signal: AbortSignal.timeout(25000) });
         if (!response.ok) throw Error('terrain upstream unavailable');
         if (Number(response.headers.get('content-length') || 0) > 512 * 1024) throw Error('upstream too large');
         const text = await response.text();
