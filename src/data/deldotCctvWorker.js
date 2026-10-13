@@ -137,7 +137,7 @@ export async function fetchDelDotHls(request,source,file='playlist.m3u8'){
 }
 export async function cctvOriginDiagnostics({request,waitUntil}){
  const store=typeof caches==='undefined'?null:caches.default;
- const key=new Request(new URL(request.url).origin+'/_gev_internal/cctv_diag_20261013_v2');
+ const key=new Request(new URL(request.url).origin+'/_gev_internal/cctv_diag_20261013_v3');
  if(store){const cached=await store.match(key);if(cached)return cached}
  const targets=[
   ['deldotCatalog',API],
@@ -156,7 +156,45 @@ export async function cctvOriginDiagnostics({request,waitUntil}){
     errorName:String(e?.name||'unknown').slice(0,30),detail:String(e?.message||'unknown').slice(0,160),
     durationMs:Date.now()-started}}
  }));
- const r=new Response(JSON.stringify({checkedAt:new Date().toISOString(),sources:entries}),{
+
+ // Verify the *proxy* and its playlist rewrite, not just upstream reachability.
+ // Use an official last-known camera ID; the result is a diagnostic, not a
+ // guarantee that every camera is online.
+ const live= fallbackDelDotCameras()[0];
+ const local=new URL('/api/cctv/media/'+live.id,request.url);
+ const proxyChecks=[];
+ try {
+  const resp=await fetchDelDotHls(new Request(local),live);
+  const playlist=await resp.text();
+  proxyChecks.push({kind:'playlist',status:resp.status,
+   mime:(resp.headers.get('content-type')||'').split(';')[0],
+   entries:playlist.startsWith('#EXTM3U')?playlist.split('\n').filter(x=>x&&!x.startsWith('#')).length:0,
+   error:resp.ok?null:playlist.slice(0,200)});
+  if(resp.ok){
+   let next=playlist.split('\n').map(x=>x.trim()).find(x=>x&&!x.startsWith('#'));
+   // A master playlist points at a media playlist; look one level further.
+   if(next && next.includes('.m3u8')){
+    const url=new URL(next,local),file=url.pathname.split('/').at(-1);
+    const variant=await fetchDelDotHls(new Request(url),live,file);
+    const text=await variant.text();
+    proxyChecks.push({kind:'variant',status:variant.status,
+     mime:(variant.headers.get('content-type')||'').split(';')[0],
+     entries:text.startsWith('#EXTM3U')?text.split('\n').filter(x=>x&&!x.startsWith('#')).length:0,
+     error:variant.ok?null:text.slice(0,200)});
+    if(variant.ok)next=text.split('\n').map(x=>x.trim()).find(x=>x&&!x.startsWith('#'));
+    else next=null;
+   }
+   if(next && /\.(?:ts|m4s|mp4|aac)(?:\?|$)/.test(next)){
+    const url=new URL(next,local),file=url.pathname.split('/').at(-1);
+    const chunk=await fetchDelDotHls(new Request(url),live,file);
+    const bytes=await chunk.arrayBuffer();
+    proxyChecks.push({kind:'segment',status:chunk.status,
+      mime:(chunk.headers.get('content-type')||'').split(';')[0],
+      bytes:chunk.ok?bytes.byteLength:0});
+   }
+  }
+ }catch(e){proxyChecks.push({kind:'proxy-test',error:String(e?.message||'unknown').slice(0,160)})}
+ const r=new Response(JSON.stringify({checkedAt:new Date().toISOString(),sources:entries,proxyChecks}),{
   headers:{'content-type':'application/json','cache-control':'public, max-age=180'}});
  if(store)waitUntil(store.put(key,r.clone()).catch(()=>{}));
  return r;
