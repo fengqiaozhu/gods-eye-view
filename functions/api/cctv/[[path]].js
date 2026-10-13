@@ -41,7 +41,7 @@ const cameraPose = (heading) => {
 async function requestJson(url, maxBytes) {
   const res = await fetch(url, {
     headers: { accept: 'application/json' },
-    redirect: 'error', signal: AbortSignal.timeout(14000)
+    redirect: 'manual', signal: AbortSignal.timeout(14000)
   });
   if (!res.ok) throw Error('camera catalog unavailable');
   if (Number(res.headers.get('content-length') || 0) > maxBytes) throw Error('camera catalog too large');
@@ -192,7 +192,7 @@ async function frame(ctx, source) {
     if (hit) return hit;
   }
   try {
-    const res = await fetch(source.url, { redirect:'error', signal:AbortSignal.timeout(8000),
+    const res = await fetch(source.url, { redirect: 'manual', signal:AbortSignal.timeout(8000),
       headers:{accept:'image/jpeg,image/png,image/webp'} });
     const type = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     if (!res.ok || !['image/jpeg','image/png','image/webp'].includes(type) ||
