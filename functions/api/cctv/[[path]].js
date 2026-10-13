@@ -17,6 +17,7 @@ import {
   fallbackHeadingFromId, prioritizeSources
 } from '../../../server/providers/cctv/normalize.js';
 import { directionToHeading } from '../../../src/data/directionText.js';
+import { tallinnPublicCameras } from '../../../src/data/tallinnPublicCameras.js';
 
 const cacheApi = () => typeof caches !== 'undefined' ? caches.default : null;
 const output = (body, status = 200, ttl = 0) => new Response(JSON.stringify(body), {
@@ -141,8 +142,10 @@ async function getCatalog(ctx) {
     if (hit) return hit.json();
   }
   const results = await Promise.allSettled([austin(),caltrans(),tfl()]);
-  const sources = [];
-  const seen = new Set();
+  // The upstream project's vetted Tallinn catalog is present even when every
+  // external public camera API is unreachable from a Cloudflare POP.
+  const sources = tallinnPublicCameras.map(x => ({...x}));
+  const seen = new Set(sources.map(x => x.id));
   for (const result of results) {
     if (result.status !== 'fulfilled') continue;
     for (const camera of result.value) {
@@ -170,6 +173,7 @@ function secureImageUrl(source) {
   if (source.pack === 'austin') return u.hostname === 'cctv.austinmobility.io' && /^\/image\/[a-zA-Z0-9_.%-]+\.jpg$/.test(u.pathname);
   if (source.pack === 'caltrans') return u.hostname === 'cwwp2.dot.ca.gov' && u.pathname.startsWith('/data/');
   if (source.pack === 'tfl') return source.url.startsWith(TFL_IMAGE_ORIGIN);
+  if (source.pack === 'tallinn') return u.hostname === 'ristmikud.tallinn.ee' && /^\/last\/cam[0-9]+\.jpg$/.test(u.pathname);
   return false;
 }
 async function frame(ctx, source) {
